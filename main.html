@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сервис управления сегментами</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            margin-left: -125px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1;
+            left: 50%;
+            bottom: 30px;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.5s linear;
+        }
+        .toast.show {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">Сервис управления сегментами пользователей</h1>
+            <p class="mt-2 text-lg text-gray-600">Интерактивная панель для A/B тестирования и управления функциями.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Панель управления -->
+            <div class="lg:col-span-1 flex flex-col gap-8">
+                <!-- Управление сегментами -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-semibold mb-4 border-b pb-2">Управление сегментами</h2>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="new-segment-slug" placeholder="Название сегмента (e.g., MAIL_GPT)" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <button id="create-segment-btn" class="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">Создать</button>
+                    </div>
+                    <div id="segments-list" class="space-y-2">
+                        <!-- Список сегментов будет здесь -->
+                    </div>
+                </div>
+
+                <!-- Распределение сегмента -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-semibold mb-4 border-b pb-2">Массовое распределение</h2>
+                    <div class="space-y-3">
+                        <div>
+                            <label for="assign-segment-select" class="block text-sm font-medium text-gray-700">Выберите сегмент:</label>
+                            <select id="assign-segment-select" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <!-- Опции для выбора сегмента -->
+                            </select>
+                        </div>
+                        <div>
+                            <label for="assign-percentage" class="block text-sm font-medium text-gray-700">Процент пользователей (%):</label>
+                            <input type="number" id="assign-percentage" value="30" min="0" max="100" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <button id="assign-percentage-btn" class="w-full bg-green-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">Распределить</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Таблица пользователей -->
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Пользователи и их сегменты</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Пользователь (ID)</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Сегменты</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-table-body" class="bg-white divide-y divide-gray-200">
+                            <!-- Строки с пользователями будут здесь -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Всплывающее уведомление -->
+    <div id="toast" class="toast"></div>
+
+<script>
+    // --- Имитация бэкенда и базы данных ---
+    const state = {
+        users: new Set([15230, 19241, 18321, 9981, 7462, 5100, 4312, 8888, 7777, 6666, 1111, 2222, 3333, 4444, 5555]),
+        segments: new Set(['MAIL_VOICE_MESSAGES', 'CLOUD_DISCOUNT_30', 'MAIL_GPT']),
+        userToSegments: {
+            15230: new Set(['MAIL_VOICE_MESSAGES', 'CLOUD_DISCOUNT_30', 'MAIL_GPT']),
+            19241: new Set(['MAIL_GPT']),
+            18321: new Set(['CLOUD_DISCOUNT_30']),
+        }
+    };
+
+    // --- DOM Элементы ---
+    const createSegmentBtn = document.getElementById('create-segment-btn');
+    const newSegmentInput = document.getElementById('new-segment-slug');
+    const segmentsListContainer = document.getElementById('segments-list');
+    const assignSegmentSelect = document.getElementById('assign-segment-select');
+    const assignPercentageInput = document.getElementById('assign-percentage');
+    const assignPercentageBtn = document.getElementById('assign-percentage-btn');
+    const usersTableBody = document.getElementById('users-table-body');
+    const toastElement = document.getElementById('toast');
+
+    // --- Функции-контроллеры (логика API) ---
+
+    function showToast(message) {
+        toastElement.textContent = message;
+        toastElement.classList.add('show');
+        setTimeout(() => {
+            toastElement.classList.remove('show');
+        }, 3000);
+    }
+
+    function createSegment(slug) {
+        if (!slug || slug.trim() === '') {
+            showToast('Название сегмента не может быть пустым.');
+            return;
+        }
+        if (state.segments.has(slug)) {
+            showToast(`Сегмент "${slug}" уже существует.`);
+            return;
+        }
+        state.segments.add(slug);
+        showToast(`Сегмент "${slug}" успешно создан.`);
+        render();
+    }
+
+    function deleteSegment(slug) {
+        if (!state.segments.has(slug)) {
+            showToast(`Сегмент "${slug}" не найден.`);
+            return;
+        }
+        state.segments.delete(slug);
+        // Удаляем сегмент у всех пользователей
+        for (const userId in state.userToSegments) {
+            state.userToSegments[userId].delete(slug);
+        }
+        showToast(`Сегмент "${slug}" удален.`);
+        render();
+    }
+    
+    function addUserToSegment(userId, slug) {
+        if (!state.segments.has(slug)) {
+             showToast(`Сегмент "${slug}" не найден.`);
+            return;
+        }
+        if (!state.userToSegments[userId]) {
+            state.userToSegments[userId] = new Set();
+        }
+        state.userToSegments[userId].add(slug);
+        render();
+    }
+
+    function removeUserFromSegment(userId, slug) {
+        if (state.userToSegments[userId]) {
+            state.userToSegments[userId].delete(slug);
+        }
+        render();
+    }
+
+    function assignSegmentToPercentage(slug, percentage) {
+        if (!state.segments.has(slug)) {
+            showToast('Выберите существующий сегмент.');
+            return;
+        }
+        if (!(percentage >= 0 && percentage <= 100)) {
+            showToast('Процент должен быть от 0 до 100.');
+            return;
+        }
+
+        const allUserIds = Array.from(state.users);
+        // Сначала очищаем сегмент у всех пользователей, чтобы обеспечить точный процент
+        allUserIds.forEach(userId => {
+             if(state.userToSegments[userId]) {
+                state.userToSegments[userId].delete(slug);
+             }
+        });
+
+        const sampleSize = Math.floor(allUserIds.length * (percentage / 100.0));
+        const randomlySelectedUsers = allUserIds.sort(() => 0.5 - Math.random()).slice(0, sampleSize);
+
+        randomlySelectedUsers.forEach(userId => {
+            if (!state.userToSegments[userId]) {
+                state.userToSegments[userId] = new Set();
+            }
+            state.userToSegments[userId].add(slug);
+        });
+        
+        showToast(`Сегмент "${slug}" назначен ${randomlySelectedUsers.length} пользователям (${percentage}%).`);
+        render();
+    }
+
+    // --- Функции рендеринга (обновление UI) ---
+
+    function renderSegmentsList() {
+        segmentsListContainer.innerHTML = '';
+        if (state.segments.size === 0) {
+            segmentsListContainer.innerHTML = `<p class="text-gray-500 text-sm">Сегментов пока нет.</p>`;
+            return;
+        }
+        Array.from(state.segments).sort().forEach(slug => {
+            const segmentEl = document.createElement('div');
+            segmentEl.className = 'flex justify-between items-center bg-gray-100 p-2 rounded-lg';
+            segmentEl.innerHTML = `
+                <span class="font-mono text-sm">${slug}</span>
+                <button data-slug="${slug}" class="delete-segment-btn text-red-500 hover:text-red-700 text-xl">&times;</button>
+            `;
+            segmentsListContainer.appendChild(segmentEl);
+        });
+    }
+
+    function renderAssignSegmentSelect() {
+        assignSegmentSelect.innerHTML = '';
+        if (state.segments.size === 0) {
+            assignSegmentSelect.innerHTML = `<option disabled>Создайте сегмент</option>`;
+            return;
+        }
+        Array.from(state.segments).sort().forEach(slug => {
+            const option = document.createElement('option');
+            option.value = slug;
+            option.textContent = slug;
+            assignSegmentSelect.appendChild(option);
+        });
+    }
+
+    function renderUsersTable() {
+        usersTableBody.innerHTML = '';
+        const sortedUsers = Array.from(state.users).sort((a, b) => a - b);
+
+        sortedUsers.forEach(userId => {
+            const userSegments = state.userToSegments[userId] || new Set();
+            const row = document.createElement('tr');
+
+            // ID пользователя
+            const cellId = document.createElement('td');
+            cellId.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900';
+            cellId.textContent = userId;
+            row.appendChild(cellId);
+
+            // Сегменты пользователя
+            const cellSegments = document.createElement('td');
+            cellSegments.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+            if (userSegments.size > 0) {
+                const segmentsHTML = Array.from(userSegments).sort().map(slug => `
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mr-1 mb-1">
+                        ${slug}
+                        <button data-user-id="${userId}" data-slug="${slug}" class="remove-user-segment-btn ml-1.5 text-blue-400 hover:text-blue-600">&times;</button>
+                    </span>
+                `).join('');
+                cellSegments.innerHTML = segmentsHTML;
+            } else {
+                cellSegments.textContent = '—';
+            }
+            row.appendChild(cellSegments);
+            
+            // Действия (добавление в сегмент)
+            const cellActions = document.createElement('td');
+            cellActions.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium';
+            const availableSegments = Array.from(state.segments).filter(s => !userSegments.has(s));
+            if (availableSegments.length > 0) {
+                 const actionHTML = `
+                    <div class="flex items-center gap-2">
+                        <select data-user-id="${userId}" class="add-segment-select w-40 text-xs border-gray-300 rounded-md shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                            ${availableSegments.map(s => `<option value="${s}">${s}</option>`).join('')}
+                        </select>
+                        <button data-user-id="${userId}" class="add-user-segment-btn bg-gray-200 text-gray-700 hover:bg-gray-300 text-xs font-bold py-1 px-2 rounded">+</button>
+                    </div>
+                `;
+                cellActions.innerHTML = actionHTML;
+            } else {
+                cellActions.innerHTML = `<span class="text-xs text-gray-400">Все сегменты добавлены</span>`;
+            }
+            row.appendChild(cellActions);
+
+            usersTableBody.appendChild(row);
+        });
+    }
+
+    function render() {
+        renderSegmentsList();
+        renderAssignSegmentSelect();
+        renderUsersTable();
+    }
+
+    // --- Обработчики событий ---
+    createSegmentBtn.addEventListener('click', () => {
+        createSegment(newSegmentInput.value.trim().toUpperCase());
+        newSegmentInput.value = '';
+    });
+    
+    newSegmentInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            createSegment(newSegmentInput.value.trim().toUpperCase());
+            newSegmentInput.value = '';
+        }
+    });
+
+    segmentsListContainer.addEventListener('click', (e) => {
+        if (e.target.classList.contains('delete-segment-btn')) {
+            const slug = e.target.dataset.slug;
+            if (confirm(`Вы уверены, что хотите удалить сегмент "${slug}"? Это действие необратимо.`)) {
+                deleteSegment(slug);
+            }
+        }
+    });
+    
+    assignPercentageBtn.addEventListener('click', () => {
+        const slug = assignSegmentSelect.value;
+        const percentage = parseFloat(assignPercentageInput.value);
+        assignSegmentToPercentage(slug, percentage);
+    });
+
+    usersTableBody.addEventListener('click', (e) => {
+        const target = e.target;
+        // Кнопка удаления сегмента у пользователя
+        if (target.classList.contains('remove-user-segment-btn')) {
+            const { userId, slug } = target.dataset;
+            removeUserFromSegment(parseInt(userId), slug);
+        }
+        // Кнопка добавления сегмента пользователю
+        if (target.classList.contains('add-user-segment-btn')) {
+            const userId = parseInt(target.dataset.userId);
+            const select = target.previousElementSibling;
+            const slug = select.value;
+            addUserToSegment(userId, slug);
+        }
+    });
+
+    // --- Инициализация ---
+    document.addEventListener('DOMContentLoaded', render);
+
+</script>
+</body>
+</html>
